@@ -232,6 +232,10 @@
             <Bundle-SymbolicName>${project.artifactId}</Bundle-SymbolicName>
             <Bundle-Version>${project.version}</Bundle-Version>
             <Bundle-Activator>org.pentaho.platform.pdi.PdiPlatformActivator</Bundle-Activator>
+            <!-- DET in PDI: Export org.pentaho.platform.pdi so that DET EE analyzer bundle
+                 can resolve BundleApplicationContextFactory and ContentGeneratorServlet
+                 via DynamicImport-Package at runtime -->
+            <Export-Package>org.pentaho.platform.pdi,org.pentaho.platform.pdi.vfs</Export-Package>
             <Import-Package>
               !com.google.gwt.user.client.rpc,
               !com.google.gwt.user.server.rpc,

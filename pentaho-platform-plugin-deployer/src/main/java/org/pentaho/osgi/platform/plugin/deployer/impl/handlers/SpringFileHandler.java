@@ -132,6 +132,17 @@ public class SpringFileHandler implements PluginFileHandler {
 
             props.appendChild( entry );
 
+            // OSGi R7 HTTP Whiteboard properties for Pax Web 8+ compatibility
+            entry = blueprint.createElementNS( BLUEPRINT_BEAN_NS, "entry" );
+            entry.setAttribute( "key", "osgi.http.whiteboard.servlet.pattern" );
+            entry.setAttribute( "value", value + "/*" );
+            props.appendChild( entry );
+
+            entry = blueprint.createElementNS( BLUEPRINT_BEAN_NS, "entry" );
+            entry.setAttribute( "key", "osgi.http.whiteboard.servlet.name" );
+            entry.setAttribute( "value", beanId );
+            props.appendChild( entry );
+
             entry = blueprint.createElementNS( BLUEPRINT_BEAN_NS, "entry" );
             entry.setAttribute( "key", "servlet-name" );
             entry.setAttribute( "value", beanId );

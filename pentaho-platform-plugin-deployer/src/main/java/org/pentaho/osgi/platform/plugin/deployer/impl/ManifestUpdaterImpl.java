@@ -106,6 +106,13 @@ public class ManifestUpdaterImpl implements ManifestUpdater {
       if ( version != null ) {
         importString += ";version=\"" + entry.getValue() + "\"";
       }
+      // DET in PDI: Mark all imports as resolution:=optional. Since DynamicImport-Package: * is
+      // always set, packages are wired dynamically at runtime when classes are first loaded.
+      // Making imports optional allows the bundle to resolve immediately during clean-cache cold
+      // starts even when package providers (e.g., pdi-platform for org.pentaho.platform.pdi)
+      // are not yet active. BundleApplicationContextFactory creates the context synchronously
+      // once the bundle is resolved — no retry mechanism needed.
+      importString += ";resolution:=optional";
       imports.add( importString );
     }
     List<String> importList = new ArrayList<String>( imports );

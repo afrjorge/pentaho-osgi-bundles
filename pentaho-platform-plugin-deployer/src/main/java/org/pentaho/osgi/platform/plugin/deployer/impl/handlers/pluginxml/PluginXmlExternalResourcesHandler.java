@@ -81,6 +81,11 @@ public class PluginXmlExternalResourcesHandler extends PluginXmlFileHandler {
           }
         }
       }
+      // Add static imports for classes referenced in the generated blueprint
+      Map<String, String> imports = pluginMetadata.getManifestUpdater().getImports();
+      imports.put( "org.pentaho.platform.pdi", null );
+      imports.put( "org.pentaho.platform.api.engine", null );
+
       Document blueprint = pluginMetadata.getBlueprint();
       for ( Map.Entry<String, List<String>> stringListEntry : contextMap.entrySet() ) {
         for ( String string : stringListEntry.getValue() ) {
