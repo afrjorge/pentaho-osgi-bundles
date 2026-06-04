@@ -1,0 +1,98 @@
+<?xml version="1.0"?>
+<project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>pentaho</groupId>
+    <artifactId>pentaho-osgi-bundles</artifactId>
+    <version>10.2.0.0-SNAPSHOT</version>
+  </parent>
+  <artifactId>pentaho-mini-spring-extender</artifactId>
+  <version>10.2.0.0-SNAPSHOT</version>
+  <packaging>bundle</packaging>
+  <name>Pentaho Community Edition Project: ${project.artifactId}</name>
+  <description>
+    Minimal OSGi extender that reproduces the only behaviour Pentaho platform plugins relied on from
+    Spring DM (Gemini Blueprint): scan an ACTIVE bundle for META-INF/spring/*.xml, build a single Spring
+    ApplicationContext using a composite classloader (so Spring namespace handlers and the legacy
+    plugin: resource protocol resolve), and publish it as an OSGi service keyed by Bundle-SymbolicName.
+    This restores the PDI 10.2.0.1 "drop a Spring-XML plugin in and it works" contract without the
+    abandoned Spring DM and without per-plugin Blueprint glue. Cold-start only.
+  </description>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.osgi</groupId>
+      <artifactId>osgi.core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-context</artifactId>
+      <version>5.3.34</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-beans</artifactId>
+      <version>5.3.34</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-core</artifactId>
+      <version>5.3.34</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>commons-logging</groupId>
+      <artifactId>commons-logging</artifactId>
+      <version>1.2</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <finalName>${project.artifactId}</finalName>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.felix</groupId>
+        <artifactId>maven-bundle-plugin</artifactId>
+        <extensions>true</extensions>
+        <configuration>
+          <instructions>
+            <Bundle-SymbolicName>${project.artifactId}</Bundle-SymbolicName>
+            <Bundle-Version>${project.version}</Bundle-Version>
+            <Bundle-Activator>org.pentaho.platform.pdi.minispring.MiniSpringExtender</Bundle-Activator>
+            <Import-Package>
+              org.osgi.framework,
+              org.osgi.framework.wiring,
+              org.osgi.framework.dto;resolution:=optional,
+              org.osgi.service.http.runtime;resolution:=optional,
+              org.osgi.service.http.runtime.dto;resolution:=optional,
+              org.osgi.util.tracker,
+              org.slf4j,
+              org.springframework.beans.factory,
+              org.springframework.beans.factory.xml,
+              org.springframework.context,
+              org.springframework.context.support,
+              org.springframework.core.io,
+              *
+            </Import-Package>
+            <DynamicImport-Package>*</DynamicImport-Package>
+          </instructions>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>
+

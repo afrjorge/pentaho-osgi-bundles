@@ -114,11 +114,21 @@ public class SpringFileHandler implements PluginFileHandler {
           if ( matcher.matches() ) {
             String beanId = matcher.group( 1 );
             Document blueprint = pluginMetadata.getBlueprint();
+
+            // [PPUC-752] Mini Spring DM extender: the content-generator beans declared in
+            // plugin.spring.xml live inside the Spring ApplicationContext that the mini extender
+            // builds from META-INF/spring/*.xml and publishes as an OSGi service keyed by
+            // Bundle-SymbolicName. The Blueprint bean id="spring" that these servlets consume is
+            // provided by the plugin's own OSGI-INF/blueprint/*.xml (e.g. analyzer_beans.xml ships a
+            // <reference id="spring" filter="(Bundle-SymbolicName=...)"/>), exactly as in 10.2.0.1.
+            // We therefore generate ONLY the servlet services here - generating another
+            // <reference id="spring"> would create a duplicate Blueprint component id and break the
+            // container.
+
             Element service = blueprint.createElementNS( BLUEPRINT_BEAN_NS, "service" );
             service.setAttribute( "interface", "javax.servlet.Servlet" );
 
             Element props = blueprint.createElementNS( BLUEPRINT_BEAN_NS, "service-properties" );
-            Element entry = blueprint.createElementNS( BLUEPRINT_BEAN_NS, "entry" );
 
             String value = "/content/" + bundleName;
             if ( "pentaho-geo".equals( bundleName ) ) {
@@ -127,14 +137,23 @@ public class SpringFileHandler implements PluginFileHandler {
               String[] split = beanId.split( "\\." );
               value = "/content/" + bundleName + "/" + split[ 1 ];
             }
-            entry.setAttribute( "key", "alias" );
-            entry.setAttribute( "value", value );
 
+            // [PPUC-752] OSGi R7 HTTP Whiteboard properties ONLY. Pax Web 8 (Karaf 4.4.6) routes the
+            // request directly to the servlet by URL pattern. The legacy 'alias' property MUST NOT be
+            // emitted here: when present alongside the whiteboard pattern, Pax Web 8's whiteboard
+            // extender treats the registration as ambiguous and silently drops it, so the
+            // content-generator endpoint returns HTTP 404. (Confirmed against the working hand-patched
+            // analyzer blueprint, which registers servlet.pattern + servlet.name and no alias.)
+            Element entry = blueprint.createElementNS( BLUEPRINT_BEAN_NS, "entry" );
+            entry.setAttribute( "key", "osgi.http.whiteboard.servlet.pattern" );
+            entry.setAttribute( "value", value + "/*" );
             props.appendChild( entry );
 
             entry = blueprint.createElementNS( BLUEPRINT_BEAN_NS, "entry" );
-            entry.setAttribute( "key", "servlet-name" );
+            entry.setAttribute( "key", "osgi.http.whiteboard.servlet.name" );
             entry.setAttribute( "value", beanId );
+            props.appendChild( entry );
+
             service.appendChild( props );
 
             Element bean = blueprint.createElementNS( BLUEPRINT_BEAN_NS, "bean" );

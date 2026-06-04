@@ -312,6 +312,13 @@ public class WebjarsURLConnection extends URLConnection {
               final RequireJsGenerator.ModuleInfo moduleInfo =
                   requireConfig.getConvertedConfig( artifactInfo, this.isAmdPackage, exports, overrides );
 
+              // Final fallback: if the version is still null (e.g., bower webjars without "version" in bower.json
+              // and pom.xml parsing failed), use the version from the physical resources path
+              if ( moduleInfo.getVersion() == null && packageVersionFromResourcesPath != null ) {
+                moduleInfo.setVersion( packageVersionFromResourcesPath );
+                logger.debug( webjarUrl + ": using version from resources path as fallback: " + packageVersionFromResourcesPath );
+              }
+
               addContentToZip( jarOutputStream, PENTAHO_RJS_LOCATION, moduleInfo.exportRequireJs() );
 
               try {

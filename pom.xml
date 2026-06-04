@@ -153,6 +153,7 @@
         <module>pentaho-proxy-spring4</module>
         <module>pentaho-webcontext</module>
         <module>pentaho-pdi-platform</module>
+        <module>pentaho-mini-spring-extender</module>
         <module>spring-security-karaf-login-module</module>
       </modules>
     </profile>
