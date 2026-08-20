@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
@@ -42,23 +43,90 @@ public class RequireJsConfigManagerTest {
   private String baseUrl;
 
   private RequireJsConfigManager requireJsConfigManager;
-  private RequireJsBundleListener mockExternalResourcesScriptsTracker;
   private RequireJsPackageServiceTracker mockPackageConfigurationsTracker;
 
   private HashMap<String, String> packageConfigurationMapping;
 
+  /**
+   * {@code mock( Future.class )} and {@code mock( Callable.class )} can only produce a raw {@code Future}/
+   * {@code Callable}, since {@code Future.class}/{@code Callable.class} are themselves raw {@code Class} literals -
+   * assigning the result to a parameterized type is therefore an unchecked conversion no matter how it's written.
+   * Centralizing the cast here keeps the suppression to a single spot instead of one per mock call.
+   */
+  @SuppressWarnings( "unchecked" )
+  private static <T> T uncheckedMock( Class<?> rawClass ) {
+    return (T) mock( rawClass );
+  }
+
   @Before
-  public void setup() throws Exception {
+  public void setup() {
     this.baseUrl = "/default/base/url/";
 
     this.mockPackageConfigurationsTracker = mock( RequireJsPackageServiceTracker.class );
-    this.mockExternalResourcesScriptsTracker = mock( RequireJsBundleListener.class );
 
     this.requireJsConfigManager = new RequireJsConfigManager();
 
     this.requireJsConfigManager.setPackageConfigurationsTracker( this.mockPackageConfigurationsTracker );
-    this.requireJsConfigManager.setExternalResourcesScriptsTracker( this.mockExternalResourcesScriptsTracker );
+    this.requireJsConfigManager.setExternalResourcesScriptsTracker( mock( RequireJsBundleListener.class ) );
     this.requireJsConfigManager.setPlugins( new ArrayList<>() );
+  }
+
+  /**
+   * [PDI-20686] A concurrent invalidation cancels the future this call is waiting on - routine while bundles are
+   * still registering their packages, most visibly during a KAR hot deploy. Retrying has to pick up the newly
+   * scheduled build instead of letting the unchecked exception escape into the servlet.
+   */
+  @Test
+  public void testGetRequireJsConfigRetriesAfterACancellation() throws ExecutionException, InterruptedException {
+    RequireJsConfigManager spyed = spy( this.requireJsConfigManager );
+
+    Future<String> cancelled = uncheckedMock( Future.class );
+    doThrow( CancellationException.class ).when( cancelled ).get();
+
+    Future<String> rebuilt = uncheckedMock( Future.class );
+    doReturn( "requireCfg" ).when( rebuilt ).get();
+
+    doReturn( cancelled ).doReturn( rebuilt ).when( spyed ).getCachedConfiguration( this.baseUrl );
+
+    String config = spyed.getRequireJsConfig( this.baseUrl );
+
+    assertEquals( "requireCfg", config );
+
+    // The whole cache must not be thrown away over one canceled entry, only that entry is dropped.
+    verify( spyed, times( 0 ) ).invalidateCachedConfigurations();
+  }
+
+  @Test
+  public void testGetRequireJsConfigReportsAnExhaustedCancellationRetry()
+    throws ExecutionException, InterruptedException {
+    RequireJsConfigManager spyed = spy( this.requireJsConfigManager );
+
+    Future<String> cancelled = uncheckedMock( Future.class );
+    doThrow( CancellationException.class ).when( cancelled ).get();
+    doReturn( cancelled ).when( spyed ).getCachedConfiguration( this.baseUrl );
+
+    String config = spyed.getRequireJsConfig( this.baseUrl );
+
+    // A CancellationException has neither a cause nor a message, so without naming the exception itself the
+    // served config would be an unattributable "unknown error" - and nothing is logged anywhere.
+    assertTrue( config, config.contains( "Error computing RequireJS Config: " + CancellationException.class.getName() ) );
+
+    verify( spyed, times( 3 ) ).getCachedConfiguration( this.baseUrl );
+    verify( spyed, times( 0 ) ).invalidateCachedConfigurations();
+  }
+
+  @Test
+  public void testGetRequireJsConfigWithoutAnyExceptionReportsAnUnknownError()
+    throws ExecutionException, InterruptedException {
+    RequireJsConfigManager spyed = spy( this.requireJsConfigManager );
+
+    Future<String> mockFuture = uncheckedMock( Future.class );
+    doReturn( null ).when( mockFuture ).get();
+    doReturn( mockFuture ).when( spyed ).getCachedConfiguration( this.baseUrl );
+
+    String config = spyed.getRequireJsConfig( this.baseUrl );
+
+    assertEquals( "{}; // Error computing RequireJS Config: unknown error", config );
   }
 
   @Test
@@ -75,7 +143,7 @@ public class RequireJsConfigManagerTest {
   public void testGetRequireJsConfigTimeout() throws ExecutionException, InterruptedException {
     RequireJsConfigManager spyed = spy( this.requireJsConfigManager );
 
-    Future mockFuture = mock( Future.class );
+    Future<String> mockFuture = uncheckedMock( Future.class );
     doThrow( InterruptedException.class ).when( mockFuture ).get();
     doReturn( mockFuture ).when( spyed ).getCachedConfiguration( this.baseUrl );
 
@@ -91,7 +159,7 @@ public class RequireJsConfigManagerTest {
   public void testGetRequireJsConfigException() throws ExecutionException, InterruptedException {
     RequireJsConfigManager spyed = spy( this.requireJsConfigManager );
 
-    Future mockFuture = mock( Future.class );
+    Future<String> mockFuture = uncheckedMock( Future.class );
     doThrow( ExecutionException.class ).when( mockFuture ).get();
     doReturn( mockFuture ).when( spyed ).getCachedConfiguration( this.baseUrl );
 
@@ -107,7 +175,7 @@ public class RequireJsConfigManagerTest {
   public void testGetRequireJsConfigExceptionWithCause() throws ExecutionException, InterruptedException {
     RequireJsConfigManager spyed = spy( this.requireJsConfigManager );
 
-    Future mockFuture = mock( Future.class );
+    Future<String> mockFuture = uncheckedMock( Future.class );
     ExecutionException executionException = new ExecutionException( new RuntimeException( "The cause" ) );
     doThrow( executionException ).when( mockFuture ).get();
     doReturn( mockFuture ).when( spyed ).getCachedConfiguration( this.baseUrl );
@@ -124,7 +192,7 @@ public class RequireJsConfigManagerTest {
   public void testGetRequireJsConfig() throws Exception {
     RequireJsConfigManager spyed = spy( this.requireJsConfigManager );
 
-    Callable mockCallable = mock( Callable.class );
+    Callable<String> mockCallable = uncheckedMock( Callable.class );
     doReturn( "The content of the requirejs configuration script" ).when( mockCallable ).call();
 
     doReturn( mockCallable ).when( spyed ).createRebuildCacheCallable( this.baseUrl );
@@ -137,7 +205,7 @@ public class RequireJsConfigManagerTest {
   }
 
   @Test
-  public void testGetRequireJsConfigBaseUrlNormalization() throws Exception {
+  public void testGetRequireJsConfigBaseUrlNormalization() {
     RequireJsConfigManager spyed = spy( this.requireJsConfigManager );
 
     spyed.getRequireJsConfig( "/base1/" );
@@ -151,7 +219,7 @@ public class RequireJsConfigManagerTest {
   public void testGetRequireJsConfigCache() throws Exception {
     RequireJsConfigManager spyed = spy( this.requireJsConfigManager );
 
-    Callable mockCallable = mock( Callable.class );
+    Callable<String> mockCallable = uncheckedMock( Callable.class );
     doReturn( "The content of the requirejs configuration script" ).when( mockCallable ).call();
 
     doReturn( mockCallable ).when( spyed ).createRebuildCacheCallable( anyString() );

@@ -197,4 +197,94 @@ public class CompositeClassLoaderTest {
     assertEquals( Collections.singletonList( secondaryUrl ),
         Collections.list( loader.getResources( "y" ) ) );
   }
+
+  /**
+   * [PDI-20686] A delegate whose bundle revision has been disposed by an un/redeploy: Felix throws a
+   * NullPointerException out of {@code BundleRevisionImpl.getResourcesLocal} instead of answering with
+   * an empty result. The surviving delegate must still answer.
+   */
+  private static class DisposedRevisionClassLoader extends ClassLoader {
+    DisposedRevisionClassLoader() {
+      super( null );
+    }
+
+    @Override
+    public URL getResource( String name ) {
+      throw new NullPointerException();
+    }
+
+    @Override
+    public Enumeration<URL> getResources( String name ) {
+      throw new NullPointerException();
+    }
+
+    @Override
+    public Class<?> loadClass( String name ) {
+      throw new NullPointerException();
+    }
+  }
+
+  @Test
+  public void getResourcesSkipsADisposedPrimary() throws IOException {
+    URL secondaryUrl = url( "file:/secondary/META-INF/services/javax.xml.parsers.DocumentBuilderFactory" );
+
+    CompositeClassLoader loader = new CompositeClassLoader(
+        new DisposedRevisionClassLoader(),
+        new StubClassLoader( Collections.singletonList( secondaryUrl ), null ) );
+
+    assertEquals( Collections.singletonList( secondaryUrl ),
+        Collections.list( loader.getResources( "META-INF/services/javax.xml.parsers.DocumentBuilderFactory" ) ) );
+  }
+
+  @Test
+  public void getResourcesSkipsADisposedSecondary() throws IOException {
+    URL primaryUrl = url( "file:/primary/z" );
+
+    CompositeClassLoader loader = new CompositeClassLoader(
+        new StubClassLoader( Collections.singletonList( primaryUrl ), null ),
+        new DisposedRevisionClassLoader() );
+
+    assertEquals( Collections.singletonList( primaryUrl ), Collections.list( loader.getResources( "z" ) ) );
+  }
+
+  @Test
+  public void getResourceSkipsADisposedPrimary() {
+    URL secondaryUrl = url( "file:/secondary/z" );
+
+    CompositeClassLoader loader = new CompositeClassLoader(
+        new DisposedRevisionClassLoader(),
+        new StubClassLoader( Collections.singletonList( secondaryUrl ), null ) );
+
+    assertEquals( secondaryUrl, loader.getResource( "z" ) );
+  }
+
+  @Test
+  public void getResourceReturnsNullWhenBothDelegatesAreDisposed() {
+    CompositeClassLoader loader = new CompositeClassLoader(
+        new DisposedRevisionClassLoader(), new DisposedRevisionClassLoader() );
+
+    assertNull( loader.getResource( "z" ) );
+  }
+
+  @Test
+  public void loadClassFallsBackToSecondaryWhenThePrimaryIsDisposed() throws ClassNotFoundException {
+    CompositeClassLoader loader = new CompositeClassLoader(
+        new DisposedRevisionClassLoader(),
+        new StubClassLoader( Collections.emptyList(), "some.Type" ) );
+
+    assertSame( String.class, loader.loadClass( "some.Type" ) );
+  }
+
+  @Test
+  public void findClassReportsADisposedSecondaryAsClassNotFound() {
+    CompositeClassLoader loader = new CompositeClassLoader(
+        new StubClassLoader( Collections.emptyList(), null ), new DisposedRevisionClassLoader() );
+
+    try {
+      loader.findClass( "some.Type" );
+      fail( "expected ClassNotFoundException" );
+    } catch ( ClassNotFoundException expected ) {
+      assertTrue( expected.getCause() instanceof NullPointerException );
+    }
+  }
 }
